@@ -2,7 +2,8 @@ name: 🌐 Dashboard Sync
 
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '*/15 * * * *'  # Cada 15 minutos
+  
   push:
     paths:
       - 'kraken_trades.csv'
@@ -10,7 +11,8 @@ on:
       - 'orders_executed.csv'
       - 'ethusd_results.png'
       - 'trading_analytics.png'
-  workflow_dispatch:
+  
+  workflow_dispatch:  # Ejecución manual
 
 permissions:
   contents: write
@@ -24,62 +26,103 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout trading repo
+      - name: 📥 Checkout Kraken-Trading (repo actual)
         uses: actions/checkout@v4
         with:
+          path: trading
           fetch-depth: 1
       
-      - name: Verify files exist
+      - name: 📥 Checkout winningtrendingbots.github.io (dashboard)
+        uses: actions/checkout@v4
+        with:
+          repository: winningtrendingbots/winningtrendingbots.github.io
+          token: ${{ secrets.DASHBOARD_TOKEN }}
+          path: dashboard
+          fetch-depth: 1
+      
+      - name: 📂 Verificar archivos en trading
         id: check_files
         run: |
-          echo "📂 Verificando archivos..."
+          echo "📂 Archivos disponibles:"
+          cd trading
           
           files_found=0
           
-          [ -f "kraken_trades.csv" ] && echo "✅ kraken_trades.csv" && files_found=$((files_found + 1))
-          [ -f "trading_signals.csv" ] && echo "✅ trading_signals.csv" && files_found=$((files_found + 1))
-          [ -f "orders_executed.csv" ] && echo "✅ orders_executed.csv" && files_found=$((files_found + 1))
-          [ -f "ethusd_results.png" ] && echo "✅ ethusd_results.png" && files_found=$((files_found + 1))
-          [ -f "trading_analytics.png" ] && echo "✅ trading_analytics.png" && files_found=$((files_found + 1))
-          
-          echo "has_files=$files_found" >> $GITHUB_OUTPUT
-      
-      - name: Setup gh-pages branch
-        if: steps.check_files.outputs.has_files > 0
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # Crear o actualizar gh-pages
-          if ! git ls-remote --heads origin gh-pages | grep -q gh-pages; then
-            echo "📝 Creando rama gh-pages..."
-            git checkout --orphan gh-pages
-            git rm -rf .
-          else
-            echo "📥 Actualizando gh-pages..."
-            git fetch origin gh-pages
-            git checkout gh-pages
-            git pull origin gh-pages
+          if [ -f "kraken_trades.csv" ]; then
+            echo "✅ kraken_trades.csv"
+            files_found=$((files_found + 1))
           fi
           
-          # Crear estructura
-          mkdir -p data images
+          if [ -f "trading_signals.csv" ]; then
+            echo "✅ trading_signals.csv"
+            files_found=$((files_found + 1))
+          fi
           
-          # Copiar archivos desde main
-          git checkout main -- kraken_trades.csv 2>/dev/null && mv kraken_trades.csv data/ || true
-          git checkout main -- trading_signals.csv 2>/dev/null && mv trading_signals.csv data/ || true
-          git checkout main -- orders_executed.csv 2>/dev/null && mv orders_executed.csv data/ || true
-          git checkout main -- open_orders.json 2>/dev/null && mv open_orders.json data/ || true
-          git checkout main -- risk_config.json 2>/dev/null && mv risk_config.json data/ || true
-          git checkout main -- ethusd_results.png 2>/dev/null && mv ethusd_results.png images/ || true
-          git checkout main -- trading_analytics.png 2>/dev/null && mv trading_analytics.png images/ || true
+          if [ -f "orders_executed.csv" ]; then
+            echo "✅ orders_executed.csv"
+            files_found=$((files_found + 1))
+          fi
           
-          echo "✅ Archivos organizados"
+          if [ -f "ethusd_results.png" ]; then
+            echo "✅ ethusd_results.png"
+            files_found=$((files_found + 1))
+          fi
+          
+          if [ -f "trading_analytics.png" ]; then
+            echo "✅ trading_analytics.png"
+            files_found=$((files_found + 1))
+          fi
+          
+          echo "has_files=$files_found" >> $GITHUB_OUTPUT
+          echo "Total: $files_found archivos"
       
-      - name: Generate metadata
+      - name: 📁 Crear estructura en dashboard
         if: steps.check_files.outputs.has_files > 0
         run: |
-          # Generar metadata.json
+          cd dashboard
+          
+          # Crear carpetas si no existen
+          mkdir -p data images
+          
+          echo "✅ Estructura creada"
+      
+      - name: 📋 Copiar archivos CSV
+        if: steps.check_files.outputs.has_files > 0
+        run: |
+          # CSV files
+          [ -f "trading/kraken_trades.csv" ] && cp trading/kraken_trades.csv dashboard/data/ && echo "✅ Copied kraken_trades.csv"
+          [ -f "trading/trading_signals.csv" ] && cp trading/trading_signals.csv dashboard/data/ && echo "✅ Copied trading_signals.csv"
+          [ -f "trading/orders_executed.csv" ] && cp trading/orders_executed.csv dashboard/data/ && echo "✅ Copied orders_executed.csv"
+          [ -f "trading/open_orders.json" ] && cp trading/open_orders.json dashboard/data/ && echo "✅ Copied open_orders.json"
+          [ -f "trading/risk_config.json" ] && cp trading/risk_config.json dashboard/data/ && echo "✅ Copied risk_config.json"
+          
+          # Images
+          [ -f "trading/ethusd_results.png" ] && cp trading/ethusd_results.png dashboard/images/ && echo "✅ Copied ethusd_results.png"
+          [ -f "trading/trading_analytics.png" ] && cp trading/trading_analytics.png dashboard/images/ && echo "✅ Copied trading_analytics.png"
+          
+          echo "📋 Archivos copiados"
+      
+      - name: 📊 Generar metadata.json
+        if: steps.check_files.outputs.has_files > 0
+        run: |
+          cd dashboard
+          
+          # Contar líneas en CSVs
+          TRADES=0
+          SIGNALS=0
+          ORDERS=0
+          
+          [ -f "data/kraken_trades.csv" ] && TRADES=$(tail -n +2 data/kraken_trades.csv | wc -l)
+          [ -f "data/trading_signals.csv" ] && SIGNALS=$(tail -n +2 data/trading_signals.csv | wc -l)
+          [ -f "data/orders_executed.csv" ] && ORDERS=$(tail -n +2 data/orders_executed.csv | wc -l)
+          
+          # Verificar imágenes
+          HAS_MODEL="false"
+          HAS_ANALYTICS="false"
+          [ -f "images/ethusd_results.png" ] && HAS_MODEL="true"
+          [ -f "images/trading_analytics.png" ] && HAS_ANALYTICS="true"
+          
+          # Crear metadata
           cat > data/metadata.json << EOF
 {
   "last_sync": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
@@ -87,23 +130,29 @@ jobs:
   "run_id": "${{ github.run_id }}",
   "repository": "${{ github.repository }}",
   "files": {
-    "trades": $([ -f "data/kraken_trades.csv" ] && tail -n +2 data/kraken_trades.csv | wc -l || echo 0),
-    "signals": $([ -f "data/trading_signals.csv" ] && tail -n +2 data/trading_signals.csv | wc -l || echo 0),
-    "orders": $([ -f "data/orders_executed.csv" ] && tail -n +2 data/orders_executed.csv | wc -l || echo 0)
+    "trades": $TRADES,
+    "signals": $SIGNALS,
+    "orders": $ORDERS
   },
   "images": {
-    "model_results": $([ -f "images/ethusd_results.png" ] && echo "true" || echo "false"),
-    "analytics": $([ -f "images/trading_analytics.png" ] && echo "true" || echo "false")
+    "model_results": $HAS_MODEL,
+    "analytics": $HAS_ANALYTICS
   }
 }
 EOF
           
           echo "📊 metadata.json generado"
+          cat data/metadata.json
       
-      - name: Create index.html
+      - name: 🔍 Verificar index.html
         if: steps.check_files.outputs.has_files > 0
         run: |
-          cat > index.html << 'HTMLEOF'
+          cd dashboard
+          
+          if [ ! -f "index.html" ]; then
+            echo "⚠️ No existe index.html, se creará uno básico"
+            
+            cat > index.html << 'HTMLEOF'
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -144,15 +193,10 @@ EOF
             padding: 25px;
             box-shadow: 0 8px 32px rgba(0,0,0,0.1);
             border: 1px solid rgba(255,255,255,0.2);
-            transition: transform 0.3s ease;
         }
-        .card:hover { transform: translateY(-5px); }
         .card h2 {
             font-size: 1.5em;
             margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
         }
         .card a {
             color: #fff;
@@ -162,7 +206,6 @@ EOF
             border-radius: 8px;
             display: inline-block;
             margin: 5px;
-            transition: background 0.3s ease;
         }
         .card a:hover { background: rgba(255,255,255,0.3); }
         .images {
@@ -233,38 +276,54 @@ EOF
 </body>
 </html>
 HTMLEOF
-          
-          echo "📝 index.html creado"
-      
-      - name: Commit and push
-        if: steps.check_files.outputs.has_files > 0
-        run: |
-          git add -A
-          
-          if git diff --staged --quiet; then
-            echo "ℹ️ Sin cambios"
+            
+            echo "✅ index.html básico creado"
           else
-            TRADES=$([ -f data/kraken_trades.csv ] && tail -n +2 data/kraken_trades.csv | wc -l || echo 0)
-            
-            git commit -m "🌐 Dashboard sync [$(date +'%Y-%m-%d %H:%M UTC')]
-
-Trades: $TRADES | Archivos: ${{ steps.check_files.outputs.has_files }}"
-            
-            git push origin gh-pages
-            
-            echo "✅ Dashboard sincronizado"
-            echo "🌐 URL: https://${{ github.repository_owner }}.github.io/$(basename ${{ github.repository }})"
+            echo "✅ index.html ya existe (no se modifica)"
           fi
       
-      - name: Notify
+      - name: 💾 Commit y push
+        if: steps.check_files.outputs.has_files > 0
+        run: |
+          cd dashboard
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add data/ images/ index.html 2>/dev/null || true
+          
+          if git diff --staged --quiet; then
+            echo "ℹ️ No hay cambios"
+          else
+            TRADES=0
+            [ -f data/kraken_trades.csv ] && TRADES=$(tail -n +2 data/kraken_trades.csv | wc -l)
+            
+            git commit -m "🌐 Dashboard sync [$(date +'%Y-%m-%d %H:%M UTC')] Trades: $TRADES"
+            git push origin main
+            
+            echo "✅ Dashboard sincronizado"
+            echo ""
+            echo "═══════════════════════════════════════"
+            echo "  🌐 DASHBOARD ACTUALIZADO"
+            echo "═══════════════════════════════════════"
+            echo "URL: https://winningtrendingbots.github.io/"
+            echo "═══════════════════════════════════════"
+          fi
+      
+      - name: 📱 Notificar sincronización
         if: always() && steps.check_files.outputs.has_files > 0
         env:
           TELEGRAM_API: ${{ secrets.TELEGRAM_API }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          URL="https://${{ github.repository_owner }}.github.io/$(basename ${{ github.repository }})"
+          URL="https://winningtrendingbots.github.io/"
+          
+          MSG="🌐 *Dashboard Sync*%0A%0A"
+          MSG="${MSG}✅ Sincronizado: ${{ steps.check_files.outputs.has_files }} archivos%0A"
+          MSG="${MSG}📅 $(date +'%Y-%m-%d %H:%M UTC')%0A%0A"
+          MSG="${MSG}🔗 ${URL}"
           
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_API}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
-            -d text="🌐 Dashboard sync OK%0A%0A🔗 ${URL}" \
-            -d parse_mode="Markdown" || true
+            -d text="${MSG}" \
+            -d parse_mode="Markdown" || echo "⚠️ Telegram notification failed"
