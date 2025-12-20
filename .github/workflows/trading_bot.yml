@@ -33,7 +33,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -q yfinance scikit-learn torch tqdm matplotlib joblib requests schedule pandas numpy
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            pip install yfinance scikit-learn torch tqdm matplotlib joblib requests
+          fi schedule pandas numpy
 
       - name: Run Prediction & Analysis
         run: python predict_and_filter.py
@@ -66,7 +71,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -q requests pandas numpy
+          python -m pip install --upgrade pip
+          pip install requests pandas numpy
 
       - name: Execute Trading
         run: python kraken_trader.py
