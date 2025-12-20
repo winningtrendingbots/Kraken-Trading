@@ -2,7 +2,7 @@ name: Run LSTM Model
 
 on:
   schedule:
-    - cron: '41 3 * * *' # Ejecutar a la 4 AM diariamente
+    - cron: '43 3 * * *' # Ejecutar a la 4 AM diariamente
 
 jobs:
   build:
@@ -14,7 +14,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.8'
+          python-version: '3.10'
 
       - name: Install dependencies
         run: |
