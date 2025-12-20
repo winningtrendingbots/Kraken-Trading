@@ -3,7 +3,7 @@ name: Update Dashboard Data
 on:
   schedule:
     # Se ejecuta cada hora
-    - cron: '0 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:  # Permite ejecución manual
 
 permissions:
