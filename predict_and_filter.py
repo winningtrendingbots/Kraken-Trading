@@ -209,8 +209,12 @@ def main():
         scaler_out = joblib.load(f'{model_dir}/scaler_output_{interval}.pkl')
         
         # Cargar modelo
-        checkpoint = torch.load(f'{model_dir}/ethusd_lstm_{interval}.pth', 
-                               map_location=torch.device('cpu'))
+        # DESPUÉS (arreglado)
+        checkpoint = torch.load(
+            f'{model_dir}/ethusd_lstm_{interval}.pth', 
+            map_location=torch.device('cpu'),
+            weights_only=False  # Necesario para PyTorch >= 2.6
+        )
         
         model = MultiOutputLSTM()
         model.load_state_dict(checkpoint['model_state_dict'])
