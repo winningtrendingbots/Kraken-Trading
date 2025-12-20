@@ -2,7 +2,7 @@ name: Run LSTM Model
 
 on:
   schedule:
-    - cron: '3 10 * * *' # Ejecutar a las 4 AM diariamente en horario de invierno (CET)
+    - cron: '9 1 * * *' # Ejecutar a las 4 AM diariamente en horario de invierno (CET)
   push:
     branches: [ "main" ]
 
