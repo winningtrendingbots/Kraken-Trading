@@ -425,7 +425,7 @@ def execute_signal():
         
         # Telegram
         stats = risk_manager.get_stats()
-        msg = f\"\"\"
+        msg = f"""
 🚀 *Nueva Orden Ejecutada*
 
 📊 Tipo: {signal}
@@ -443,7 +443,7 @@ def execute_signal():
    Capital: ${stats['current_capital']:.2f}
    Posiciones: {stats['open_positions']}/{risk_manager.max_open_positions}
    WR: {stats['win_rate']:.1f}%
-\"\"\"
+"""
         send_telegram(msg)
         
     else:
