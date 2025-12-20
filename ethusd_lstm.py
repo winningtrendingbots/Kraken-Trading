@@ -5,6 +5,8 @@ import torch.nn as nn
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+import matplotlib
+matplotlib.use('Agg')  # ✅ IMPORTANTE: Usar backend sin GUI
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 import os
@@ -15,21 +17,23 @@ import yfinance as yf
 from tqdm.auto import tqdm
 import requests
 
-#
-#
 # Configuración de Telegram
 TELEGRAM_API = '8286372753:AAF356kUIEbZRI-Crdo4jIrXc89drKGWIWY'
 CHAT_ID = '5825443798'
 
 # Función para enviar mensajes a Telegram
 def send_telegram_message(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_API}/sendMessage"
-    data = {
-        'chat_id': CHAT_ID,
-        'text': message,
-        'parse_mode': 'Markdown'
-    }
-    requests.post(url, data=data)
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_API}/sendMessage"
+        data = {
+            'chat_id': CHAT_ID,
+            'text': message,
+            'parse_mode': 'Markdown'
+        }
+        response = requests.post(url, data=data, timeout=10)
+        print(f"📱 Telegram: {response.status_code}")
+    except Exception as e:
+        print(f"⚠️ Error Telegram: {e}")
 
 # Función para descargar datos de ETHUSD
 def download_ethusd(interval='1h', path='ETHUSD_1h_data.csv'):
@@ -321,92 +325,108 @@ def plot_results(train_l, val_l, lrs, pred_d, act_d, path):
 
     plt.tight_layout()
     plt.savefig(path, dpi=150, bbox_inches='tight')
-    plt.show()
+    plt.close(fig)  # ✅ Cerrar figura en lugar de show()
     print(f"📈 Gráficas: {path}\n")
 
 # Script principal para ejecutar el modelo
 if __name__ == "__main__":
-    
-    print("\n" + "="*70)
-    print("  PIPELINE COMPLETO")
-    print("="*70 + "\n")
+    try:
+        print("\n" + "="*70)
+        print("  PIPELINE COMPLETO")
+        print("="*70 + "\n")
 
-    # CONFIGURACIÓN
-    INTERVAL = '1h'  # Cambiar aquí si es necesario
-    SEQ_LEN = 60
-    HIDDEN = 256
-    LAYERS = 3
-    DROPOUT = 0.2
-    BATCH = 128
-    EPOCHS = 150
-    LR = 0.001
-    PATIENCE = 20
+        # CONFIGURACIÓN
+        INTERVAL = '1h'
+        SEQ_LEN = 60
+        HIDDEN = 256
+        LAYERS = 3
+        DROPOUT = 0.2
+        BATCH = 128
+        EPOCHS = 150
+        LR = 0.001
+        PATIENCE = 20
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"🖥️  Device: {device}\n")
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        print(f"🖥️ Device: {device}\n")
 
-    # 1. Descargar
-    df = download_ethusd(interval=INTERVAL, path='ETHUSD_1h_data.csv')
+        # 1. Descargar
+        df = download_ethusd(interval=INTERVAL, path='ETHUSD_1h_data.csv')
 
-    # 2. Preparar
-    X, y, scaler_in, scaler_out = prepare_data(df, SEQ_LEN)
+        # 2. Preparar
+        X, y, scaler_in, scaler_out = prepare_data(df, SEQ_LEN)
 
-    # 3. Split
-    print("="*70)
-    print("  DIVISIÓN DE DATOS")
-    print("="*70)
-    X_temp, X_test, y_temp, y_test = train_test_split(X, y, test_size=0.1, shuffle=False)
-    X_train, X_val, y_train, y_val = train_test_split(X_temp, y_temp, test_size=0.15, shuffle=False)
-    print(f"Train: {len(X_train):,} | Val: {len(X_val):,} | Test: {len(X_test):,}\n")
+        # 3. Split
+        print("="*70)
+        print("  DIVISIÓN DE DATOS")
+        print("="*70)
+        X_temp, X_test, y_temp, y_test = train_test_split(X, y, test_size=0.1, shuffle=False)
+        X_train, X_val, y_train, y_val = train_test_split(X_temp, y_temp, test_size=0.15, shuffle=False)
+        print(f"Train: {len(X_train):,} | Val: {len(X_val):,} | Test: {len(X_test):,}\n")
 
-    # 4. Loaders
-    train_loader = DataLoader(ForexDataset(X_train, y_train), BATCH, shuffle=True)
-    val_loader = DataLoader(ForexDataset(X_val, y_val), BATCH, shuffle=False)
-    test_loader = DataLoader(ForexDataset(X_test, y_test), BATCH, shuffle=False)
+        # 4. Loaders
+        train_loader = DataLoader(ForexDataset(X_train, y_train), BATCH, shuffle=True)
+        val_loader = DataLoader(ForexDataset(X_val, y_val), BATCH, shuffle=False)
+        test_loader = DataLoader(ForexDataset(X_test, y_test), BATCH, shuffle=False)
 
-    # 5. Modelo
-    model = MultiOutputLSTM(4, HIDDEN, LAYERS, 3, DROPOUT)
-    params = sum(p.numel() for p in model.parameters())
-    print(f"🧠 Modelo: {params:,} parámetros\n")
+        # 5. Modelo
+        model = MultiOutputLSTM(4, HIDDEN, LAYERS, 3, DROPOUT)
+        params = sum(p.numel() for p in model.parameters())
+        print(f"🧠 Modelo: {params:,} parámetros\n")
 
-    # 6. Entrenar
-    start = time.time()
-    train_l, val_l, lrs = train_model(model, train_loader, val_loader, EPOCHS, LR, device, PATIENCE)
+        # 6. Entrenar
+        start = time.time()
+        train_l, val_l, lrs = train_model(model, train_loader, val_loader, EPOCHS, LR, device, PATIENCE)
 
-    # 7. Evaluar
-    preds, acts, metrics, pred_d, act_d = evaluate(model, test_loader, scaler_out, device)
+        # 7. Evaluar
+        preds, acts, metrics, pred_d, act_d = evaluate(model, test_loader, scaler_out, device)
 
-    # 8. Graficar
-    plot_results(train_l, val_l, lrs, pred_d, act_d, 'ethusd_results.png')
+        # 8. Graficar
+        plot_results(train_l, val_l, lrs, pred_d, act_d, 'ethusd_results.png')
 
-    # 9. Guardar
-    model_dir = 'ETHUSD_MODELS'
-    os.makedirs(model_dir, exist_ok=True)
+        # 9. Guardar
+        model_dir = 'ETHUSD_MODELS'
+        os.makedirs(model_dir, exist_ok=True)
 
-    torch.save({
-        'model_state_dict': model.state_dict(),
-        'metrics': metrics,
-        'config': {'seq_len': SEQ_LEN, 'hidden': HIDDEN, 'layers': LAYERS}
-    }, f'{model_dir}/ethusd_lstm_{INTERVAL}.pth')
+        torch.save({
+            'model_state_dict': model.state_dict(),
+            'metrics': metrics,
+            'config': {'seq_len': SEQ_LEN, 'hidden': HIDDEN, 'layers': LAYERS}
+        }, f'{model_dir}/ethusd_lstm_{INTERVAL}.pth')
 
-    joblib.dump(scaler_in, f'{model_dir}/scaler_input_{INTERVAL}.pkl')
-    joblib.dump(scaler_out, f'{model_dir}/scaler_output_{INTERVAL}.pkl')
+        joblib.dump(scaler_in, f'{model_dir}/scaler_input_{INTERVAL}.pkl')
+        joblib.dump(scaler_out, f'{model_dir}/scaler_output_{INTERVAL}.pkl')
 
-    with open(f'{model_dir}/config_{INTERVAL}.json', 'w') as f:
-        json.dump({
-            'interval': INTERVAL,
-            'seq_len': SEQ_LEN,
-            'metrics': {k: {mk: float(mv) for mk, mv in v.items()}
-                        for k, v in metrics.items()}
-        }, f, indent=2)
+        with open(f'{model_dir}/config_{INTERVAL}.json', 'w') as f:
+            json.dump({
+                'interval': INTERVAL,
+                'seq_len': SEQ_LEN,
+                'metrics': {k: {mk: float(mv) for mk, mv in v.items()}
+                            for k, v in metrics.items()}
+            }, f, indent=2)
 
-    total_time = time.time() - start
-    print("\n" + "="*70)
-    print("✅✅✅  COMPLETADO  ✅✅✅")
-    print("="*70)
-    print(f"⏱️  Tiempo total: {total_time/60:.1f} min")
-    print(f"📦 Modelo: {model_dir}/ethusd_lstm_{INTERVAL}.pth")
-    print(f"📦 Scalers: {model_dir}/scaler_*_{INTERVAL}.pkl")
-    print(f"📊 Config: {model_dir}/config_{INTERVAL}.json")
-    print(f"📈 Gráficas: ethusd_results.png")
-    send_telegram_message("✅ Entrenamiento y evaluación completados exitosamente.")
+        total_time = time.time() - start
+        print("\n" + "="*70)
+        print("✅✅✅  COMPLETADO  ✅✅✅")
+        print("="*70)
+        print(f"⏱️ Tiempo total: {total_time/60:.1f} min")
+        print(f"📦 Modelo: {model_dir}/ethusd_lstm_{INTERVAL}.pth")
+        print(f"📦 Scalers: {model_dir}/scaler_*_{INTERVAL}.pkl")
+        print(f"📊 Config: {model_dir}/config_{INTERVAL}.json")
+        print(f"📈 Gráficas: ethusd_results.png")
+        
+        # Verificar archivos creados
+        files_created = []
+        if os.path.exists('ETHUSD_1h_data.csv'):
+            files_created.append('✅ CSV')
+        if os.path.exists(f'{model_dir}/ethusd_lstm_{INTERVAL}.pth'):
+            files_created.append('✅ Modelo')
+        if os.path.exists('ethusd_results.png'):
+            files_created.append('✅ Gráficas')
+        
+        send_telegram_message(f"✅ Entrenamiento completado\n{' | '.join(files_created)}")
+        
+    except Exception as e:
+        error_msg = f"❌ Error: {str(e)}"
+        print(error_msg)
+        send_telegram_message(error_msg)
+        raise
