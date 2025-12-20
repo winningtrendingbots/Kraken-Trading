@@ -2,16 +2,15 @@ name: Run LSTM Model
 
 on:
   schedule:
-    - cron: '0 3 * * *' # Ejecutar a la 4 AM diariamente
+    - cron: '3 2 * * *' # Ejecutar a las 4 AM diariamente en horario de invierno (CET)
+    # - cron: '2 2 * * *' # Ejecutar a las 4 AM diariamente en horario de verano (CEST)
 
 permissions:
   contents: write
 
 jobs:
-
   collect:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -34,11 +33,9 @@ jobs:
       - name: Commit and push data
         run: |
           set -e
-
           git config user.name "github-actions"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          git add data/ethusd_1h.csv || true
+          git add data/eurusd_5m.csv || true
 
           if git diff --staged --quiet; then
             echo "No changes to commit"
