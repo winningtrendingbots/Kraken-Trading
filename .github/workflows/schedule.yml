@@ -2,7 +2,7 @@ name: Run LSTM Model
 
 on:
   schedule:
-    - cron: '56 3 * * *' # Ejecutar a la 4 AM diariamente
+    - cron: '0 3 * * *' # Ejecutar a la 4 AM diariamente
 
 permissions:
   contents: write
