@@ -3,7 +3,7 @@ name: 🤖 Trading Bot Unificado
 on:
   schedule:
     - cron: '0 9 * * *'    # Entrenar diario 9 AM UTC
-    - cron: '0 * * * *'     # Trading cada hora
+    - cron: '*/5 * * * *'     # '0 * * * *' Trading cada hora  # Monitoreo cada 5 min
     - cron: '*/5 * * * *'  # Monitoreo cada 5 min
   workflow_dispatch:
     inputs:
