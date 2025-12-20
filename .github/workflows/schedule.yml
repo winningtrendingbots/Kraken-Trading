@@ -38,7 +38,7 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add data/eurusd_5m.csv || true
+          git add data/ethusd_1h.csv || true
 
           if git diff --staged --quiet; then
             echo "No changes to commit"
