@@ -337,7 +337,7 @@ def execute_signal():
     print("   Para trading real, descomentar bloque de código")
     
     # Descomentar para ejecutar en real:
-    """
+    
     result = place_order(side, volume, None, tp, sl)
     
     if 'result' in result and 'txid' in result['result']:
@@ -417,7 +417,7 @@ def execute_signal():
         error = result.get('error', 'Unknown error')
         print(f"❌ Error al ejecutar orden: {error}")
         send_telegram(f"❌ Error ejecutando orden: {error}")
-    """
+    
 
 def main():
     print("="*70)
