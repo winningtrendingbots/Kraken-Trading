@@ -1,0 +1,22 @@
+# Trading Bot Dependencies
+
+# Data & Analysis
+pandas>=2.0.0
+numpy>=1.24.0
+yfinance>=0.2.28
+
+# Machine Learning
+torch>=2.0.0
+scikit-learn>=1.3.0
+
+# Visualization
+matplotlib>=3.7.0
+
+# Utilities
+requests>=2.31.0
+schedule>=1.2.0
+joblib>=1.3.0
+tqdm>=4.66.0
+
+# CSV Parsing
+PapaParse>=5.4.1  # For web dashboard (JS)
