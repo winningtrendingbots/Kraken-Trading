@@ -1,0 +1,105 @@
+name: Trading Bot
+
+on:
+  schedule:
+    # Cada hora
+    - cron: '0 * * * *'
+  workflow_dispatch:  # Permite ejecución manual
+
+permissions:
+  contents: write
+
+jobs:
+  # Job 1: Predicción horaria
+  predict:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          pip install -q yfinance scikit-learn torch tqdm matplotlib joblib requests schedule pandas numpy
+
+      - name: Run Prediction & Analysis
+        run: python predict_and_filter.py
+
+      - name: Commit signals
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add trading_signals.csv || true
+          if ! git diff --staged --quiet; then
+            git commit -m "Update signals [skip ci]"
+            git push
+          fi
+
+  # Job 2: Ejecutar trading (depende de predict)
+  trade:
+    needs: predict
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          pip install -q requests pandas numpy
+
+      - name: Execute Trading
+        run: python kraken_trader.py
+
+      - name: Commit trades
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add kraken_trades.csv orders_executed.csv open_orders.json || true
+          if ! git diff --staged --quiet; then
+            git commit -m "Update trades [skip ci]"
+            git push
+          fi
+
+  # Job 3: Monitoreo (cada 15 min con cron separado)
+  monitor:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '*/15 * * * *'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: pip install -q requests pandas numpy
+
+      - name: Monitor Orders
+        run: python -c "from kraken_trader import monitor_orders; monitor_orders()"
+
+      - name: Commit updates
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add kraken_trades.csv open_orders.json || true
+          if ! git diff --staged --quiet; then
+            git commit -m "Monitor update [skip ci]"
+            git push
+          fi
