@@ -1,0 +1,24 @@
+name: Run LSTM Model
+
+on:
+  schedule:
+    - cron: '0 4 * * *' # Ejecutar a la 4 AM diariamente
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.8'
+
+      - name: Install dependencies
+        run: |
+          pip install -q yfinance scikit-learn torch tqdm matplotlib joblib requests
+
+      - name: Run script
+        run: python ethusd_lstm.py
