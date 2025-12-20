@@ -18,11 +18,14 @@ from tqdm.auto import tqdm
 import requests
 
 # Configuración de Telegram
-TELEGRAM_API = '8286372753:AAF356kUIEbZRI-Crdo4jIrXc89drKGWIWY'
-CHAT_ID = '5825443798'
+TELEGRAM_API = os.environ.get('TELEGRAM_API', '')
+CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 
 # Función para enviar mensajes a Telegram
 def send_telegram_message(message):
+    if not TELEGRAM_API or not CHAT_ID:
+        print("⚠️ Telegram no configurado")
+        return
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_API}/sendMessage"
         data = {
@@ -44,10 +47,21 @@ def download_ethusd(interval='1h', path='ETHUSD_1h_data.csv'):
     if os.path.exists(path):
         df_exist = pd.read_csv(path)
         df_exist['time'] = pd.to_datetime(df_exist['time'])
+        
+        # ✅ FIX: Asegurar que ambas fechas tengan el mismo timezone
+        # Si df_exist tiene timezone, usar tz-aware; si no, usar tz-naive
+        if df_exist['time'].dt.tz is not None:
+            # El CSV tiene timezone, usar pd.Timestamp.now con UTC
+            now = pd.Timestamp.now(tz='UTC')
+        else:
+            # El CSV no tiene timezone, usar naive
+            now = pd.Timestamp.now()
+        
         print(f"📂 Archivo existente: {len(df_exist):,} velas")
         print(f"📅 Rango: {df_exist['time'].min()} → {df_exist['time'].max()}")
 
-        diff_h = (pd.Timestamp.now() - df_exist['time'].max()).total_seconds() / 3600
+        diff_h = (now - df_exist['time'].max()).total_seconds() / 3600
+        
         if (interval == '1d' and diff_h < 24) or (interval == '1h' and diff_h < 1):
             print(f"✅ Datos actualizados (hace {diff_h:.1f}h)\n")
             return df_exist
@@ -58,9 +72,17 @@ def download_ethusd(interval='1h', path='ETHUSD_1h_data.csv'):
     df_new = df_new.reset_index()
     df_new.columns = [str(c).lower() for c in df_new.columns]
     df_new.rename(columns={'date': 'time', 'datetime': 'time'}, inplace=True)
+    
+    # ✅ FIX: Remover timezone para consistencia
+    if 'time' in df_new.columns:
+        df_new['time'] = pd.to_datetime(df_new['time']).dt.tz_localize(None)
+    
     df_new = df_new[['time', 'open', 'high', 'low', 'close']]
 
     if 'df_exist' in locals():
+        # ✅ FIX: Asegurar que ambos DataFrames tengan el mismo timezone (ninguno)
+        df_exist['time'] = df_exist['time'].dt.tz_localize(None) if df_exist['time'].dt.tz is not None else df_exist['time']
+        
         df = pd.concat([df_exist, df_new], ignore_index=True)
         df.sort_values('time', inplace=True)
         df.drop_duplicates('time', keep='last', inplace=True)
@@ -325,7 +347,7 @@ def plot_results(train_l, val_l, lrs, pred_d, act_d, path):
 
     plt.tight_layout()
     plt.savefig(path, dpi=150, bbox_inches='tight')
-    plt.close(fig)  # ✅ Cerrar figura en lugar de show()
+    plt.close(fig)
     print(f"📈 Gráficas: {path}\n")
 
 # Script principal para ejecutar el modelo
