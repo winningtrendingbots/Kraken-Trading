@@ -1,0 +1,243 @@
+name: 🤖 Trading Bot - Main Workflow
+
+on:
+  schedule:
+    # Entrenamiento diario a las 4 AM UTC
+    - cron: '0 23 * * *'
+    # Predicción y trading cada hora
+    - cron: '0 * * * *'
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Task to run'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - train
+          - predict
+          - trade
+          - monitor
+
+permissions:
+  contents: write
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      should_train: ${{ steps.check.outputs.should_train }}
+      should_predict: ${{ steps.check.outputs.should_predict }}
+      should_trade: ${{ steps.check.outputs.should_trade }}
+    steps:
+      - name: Determine tasks
+        id: check
+        run: |
+          hour=$(date -u +%H)
+          task="${{ github.event.inputs.task }}"
+          
+          # Decidir qué ejecutar
+          if [ "$task" == "all" ] || [ -z "$task" ]; then
+            # Entrenar solo a las 4 AM
+            if [ "$hour" == "04" ]; then
+              echo "should_train=true" >> $GITHUB_OUTPUT
+            else
+              echo "should_train=false" >> $GITHUB_OUTPUT
+            fi
+            echo "should_predict=true" >> $GITHUB_OUTPUT
+            echo "should_trade=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_train=$( [ '$task' == 'train' ] && echo true || echo false )" >> $GITHUB_OUTPUT
+            echo "should_predict=$( [ '$task' == 'predict' ] && echo true || echo false )" >> $GITHUB_OUTPUT
+            echo "should_trade=$( [ '$task' == 'trade' ] && echo true || echo false )" >> $GITHUB_OUTPUT
+          fi
+
+  train-model:
+    needs: setup
+    if: needs.setup.outputs.should_train == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: training
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: 'pip'
+      
+      - name: Install deps
+        run: pip install -q yfinance scikit-learn torch tqdm matplotlib joblib requests
+      
+      - name: Train LSTM
+        run: python ethusd_lstm.py
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-model
+          path: |
+            ETHUSD_MODELS/
+            ETHUSD_1h_data.csv
+            ethusd_results.png
+          retention-days: 7
+
+  predict-and-trade:
+    needs: [setup, train-model]
+    if: |
+      always() &&
+      (needs.train-model.result == 'success' || needs.train-model.result == 'skipped')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: trading
+      cancel-in-progress: false
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: 'pip'
+
+      - name: Download model artifacts
+        if: needs.train-model.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: trained-model
+          path: .
+
+      - name: Install dependencies
+        run: |
+          pip install -q yfinance scikit-learn torch tqdm matplotlib joblib requests pandas numpy schedule
+
+      - name: Generate Predictions
+        if: needs.setup.outputs.should_predict == 'true'
+        run: |
+          if [ -f "predict_and_filter.py" ]; then
+            python predict_and_filter.py
+          else
+            echo "⚠️ Prediction script not found"
+          fi
+
+      - name: Execute Trading
+        if: needs.setup.outputs.should_trade == 'true'
+        run: |
+          if [ -f "kraken_trader.py" ]; then
+            python kraken_trader.py
+          else
+            echo "⚠️ Trading script not found"
+          fi
+
+      - name: Generate Analytics
+        if: github.event.schedule == '0 4 * * *'
+        run: |
+          if [ -f "analytics.py" ]; then
+            python analytics.py
+          fi
+
+      - name: Commit all changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Status antes
+          echo "📊 Git status:"
+          git status --short
+          
+          # Añadir archivos
+          git add -A
+          
+          # Verificar cambios
+          if git diff --staged --quiet; then
+            echo "✅ No changes to commit"
+            exit 0
+          fi
+
+          # Commit
+          TIMESTAMP=$(date -u +'%Y-%m-%d %H:%M UTC')
+          HOUR=$(date -u +%H)
+          
+          if [ "$HOUR" == "04" ]; then
+            MSG="🎓 Daily model training + trading"
+          else
+            MSG="📊 Hourly prediction + trading"
+          fi
+          
+          git commit -m "🤖 $MSG [$TIMESTAMP] [skip ci]"
+
+          # Push con estrategia robusta
+          echo "📤 Pushing changes..."
+          
+          push_with_retry() {
+            local max_attempts=5
+            local attempt=1
+            
+            while [ $attempt -le $max_attempts ]; do
+              echo "📤 Push attempt $attempt/$max_attempts..."
+              
+              if git push origin main; then
+                echo "✅ Push successful!"
+                return 0
+              fi
+              
+              echo "⚠️ Push failed, pulling updates..."
+              
+              # Pull con merge strategy
+              if ! git pull origin main --no-rebase --strategy-option=ours; then
+                echo "⚠️ Pull failed, resolving conflicts..."
+                
+                # Resolver conflictos - mantener nuestros cambios
+                git checkout --ours . 2>/dev/null || true
+                git add -A
+                
+                if ! git diff --cached --quiet; then
+                  git commit -m "🔧 Auto-resolve conflicts [$TIMESTAMP]" || true
+                fi
+              fi
+              
+              attempt=$((attempt + 1))
+              
+              if [ $attempt -le $max_attempts ]; then
+                sleep_time=$((attempt * 2))
+                echo "⏳ Waiting ${sleep_time}s before retry..."
+                sleep $sleep_time
+              fi
+            done
+            
+            echo "❌ Failed to push after $max_attempts attempts"
+            return 1
+          }
+          
+          if push_with_retry; then
+            echo "✅ All changes pushed successfully!"
+          else
+            echo "::warning::Could not push changes. Manual intervention may be needed."
+            exit 0  # No fallar el workflow
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## 📊 Workflow Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Time**: $(date -u +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "- **Training**: ${{ needs.train-model.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Prediction**: ${{ needs.setup.outputs.should_predict }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Trading**: ${{ needs.setup.outputs.should_trade }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f "trading_signals.csv" ]; then
+            last_signal=$(tail -1 trading_signals.csv | cut -d',' -f8)
+            echo "- **Last Signal**: $last_signal" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -f "kraken_trades.csv" ]; then
+            total_trades=$(wc -l < kraken_trades.csv)
+            echo "- **Total Trades**: $((total_trades - 1))" >> $GITHUB_STEP_SUMMARY
+          fi
