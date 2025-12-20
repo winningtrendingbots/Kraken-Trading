@@ -111,8 +111,10 @@ def calculate_tp_sl(entry_price, side, atr, pred_high, pred_low, tp_percentage=0
     
     return round(tp, 2), round(sl, 2)
 
+# ... (mantener todo el código anterior hasta la línea 80) ...
+
 def monitor_orders():
-    """Monitorea órdenes abiertas y cierra por TP/SL/tiempo"""
+    """Monitorea órdenes abiertas y cierra por TP/SL/tiempo - CADA 5 MINUTOS"""
     if not os.path.exists(OPEN_ORDERS_FILE):
         return
     
@@ -142,13 +144,17 @@ def monitor_orders():
         open_time = datetime.fromisoformat(order['open_time'])
         volume = order['volume']
         
-        time_open = (datetime.now() - open_time).total_seconds() / 60
+        time_open = (datetime.now() - open_time).total_seconds() / 60  # en minutos
         
         should_close = False
         close_reason = None
         close_price = current_price
         
-        # Verificar TP
+        # ═══════════════════════════════════════════════════════════
+        # CONFIGURACIÓN DE CIERRES - AJUSTA AQUÍ
+        # ═══════════════════════════════════════════════════════════
+        
+        # 1. Verificar TP (Take Profit)
         if side == 'buy' and current_price >= tp:
             should_close = True
             close_reason = 'TP'
@@ -156,7 +162,7 @@ def monitor_orders():
             should_close = True
             close_reason = 'TP'
         
-        # Verificar SL
+        # 2. Verificar SL (Stop Loss)
         elif side == 'buy' and current_price <= sl:
             should_close = True
             close_reason = 'SL'
@@ -164,17 +170,37 @@ def monitor_orders():
             should_close = True
             close_reason = 'SL'
         
-        # Verificar tiempo (cerrar después de 60 minutos)
-        elif time_open >= 60:
+        # 3. TIMEOUT - Cerrar después de X minutos
+        # ⚠️ AJUSTA AQUÍ EL TIMEOUT ⚠️
+        elif time_open >= 300:  # 300 minutos = 5 horas
             should_close = True
             close_reason = 'TIMEOUT'
         
+        # 4. STOP LOSS PROGRESIVO (Opcional)
+        # Cierra si pierde más de X% en los primeros Y minutos
+        elif time_open <= 10:  # Primeros 10 minutos
+            loss_pct = ((current_price - entry_price) / entry_price) * 100
+            if side == 'buy' and loss_pct < -1.0:  # Pierde más de 1%
+                should_close = True
+                close_reason = 'QUICK_LOSS'
+            elif side == 'sell' and loss_pct > 1.0:
+                should_close = True
+                close_reason = 'QUICK_LOSS'
+        
+        # ═══════════════════════════════════════════════════════════
+        
         if should_close:
             print(f"🔴 Cerrando orden {txid[:8]}... por {close_reason}")
+            print(f"   Tiempo abierto: {time_open:.1f} min")
+            print(f"   Precio entrada: ${entry_price:.2f}")
+            print(f"   Precio cierre: ${close_price:.2f}")
             
             # Cancelar en Kraken
-            cancel_result = cancel_order(txid)
-            print(f"   Kraken cancel: {cancel_result}")
+            # ⚠️ DESCOMENTAR PARA TRADING REAL ⚠️
+            # cancel_result = cancel_order(txid)
+            # print(f"   Kraken cancel: {cancel_result}")
+            
+            print("   ⚠️ MODO SIMULACIÓN - Orden NO cancelada en Kraken")
             
             # Calcular P&L
             if side == 'buy':
@@ -216,7 +242,7 @@ def monitor_orders():
             msg = f"""
 {emoji} *Orden Cerrada*
 
-🔖 ID: {txid[:8]}...
+📖 ID: {txid[:8]}...
 📊 Tipo: {side.upper()}
 💰 Entrada: ${entry_price:.2f}
 💰 Salida: ${close_price:.2f}
@@ -232,7 +258,12 @@ def monitor_orders():
 """
             send_telegram(msg)
         else:
+            # Mantener orden abierta
             updated_orders.append(order)
+            
+            # Log de seguimiento
+            time_left = 300 - time_open  # Asumiendo timeout de 300 min
+            print(f"📊 {txid[:8]}... | {side.upper()} | {time_open:.1f}min | Quedan {time_left:.1f}min")
     
     # Actualizar archivo
     with open(OPEN_ORDERS_FILE, 'w') as f:
@@ -242,6 +273,8 @@ def monitor_orders():
         print(f"✅ Monitoreo completado: {len(updated_orders)} órdenes activas")
     else:
         print("✅ Todas las órdenes fueron cerradas")
+
+# ... (mantener resto del código igual) ...
 
 def execute_signal():
     """Lee última señal y ejecuta si es BUY/SELL con gestión de riesgo"""
