@@ -240,7 +240,8 @@ def monitor_orders():
             stats = risk_manager.get_stats()
             
             msg = f"""
-{emoji} *Orden Cerrada*
+🚀 *Nueva Orden Ejecutada*
+ *Orden Cerrada*
 
 📖 ID: {txid[:8]}...
 📊 Tipo: {side.upper()}
