@@ -15,6 +15,7 @@ import yfinance as yf
 from tqdm.auto import tqdm
 import requests
 
+#
 # Configuración de Telegram
 TELEGRAM_API = '8286372753:AAF356kUIEbZRI-Crdo4jIrXc89drKGWIWY'
 CHAT_ID = '5825443798'
