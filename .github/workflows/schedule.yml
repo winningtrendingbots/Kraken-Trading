@@ -2,23 +2,50 @@ name: Run LSTM Model
 
 on:
   schedule:
-    - cron: '43 3 * * *' # Ejecutar a la 4 AM diariamente
+    - cron: '54 3 * * *' # Ejecutar a la 4 AM diariamente
+
+permissions:
+  contents: write
 
 jobs:
-  build:
+
+  collect:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v2
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: "3.10"
 
       - name: Install dependencies
         run: |
           pip install -q yfinance scikit-learn torch tqdm matplotlib joblib requests
 
-      - name: Run script
+      - name: Collect data & Create model
         run: python ethusd_lstm.py
+
+      - name: Commit and push data
+        run: |
+          set -e
+
+          git config user.name "github-actions"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add data/eurusd_5m.csv || true
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          git commit -m "Auto-update Collect data & Create model"
+
+          git pull --rebase origin main || true
+          git push origin main
